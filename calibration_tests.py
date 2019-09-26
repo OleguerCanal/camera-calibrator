@@ -19,19 +19,28 @@ def get_corners(img, boardSize, subpixel = False):
     return True, corners_subpx
 
 def get_apriltag_center(img):
-    pass
-
-
-
+    detector = apriltag.Detector()
+    result = detector.detect(img)
+    return np.array(result[0].center, dtype=np.int16)
 
 if __name__ == "__main__":
-    gray_img = cv2.imread("data/calib_example.png", cv2.IMREAD_GRAYSCALE)
-    boardSize = (4, 4)
+    # gray_img = cv2.imread("data/calib_example.png", cv2.IMREAD_GRAYSCALE)
+    # boardSize = (4, 4)
 
-    found, corners = get_corners(gray_img, boardSize, False)
+    apriltag_img = cv2.imread("data/apriltag_example.jpeg", cv2.IMREAD_GRAYSCALE)
+    apriltag_center = get_apriltag_center(apriltag_img)
+    print(apriltag_center)
 
-    # Show
-    rgb_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2RGB)
-    rgb_img = cv2.drawChessboardCorners(rgb_img, boardSize, corners, found)
-    cv2.imshow("rgb_img", rgb_img)
+    apriltag_rgb_img = cv2.cvtColor(apriltag_img, cv2.COLOR_GRAY2RGB)
+    cv2.circle(apriltag_rgb_img, (apriltag_center[0], apriltag_center[1]), 3, (0, 0, 255), -1)
+    cv2.imshow("apriltag_rgb_img", apriltag_rgb_img)
     cv2.waitKey(0)
+
+
+    # found, corners = get_corners(gray_img, boardSize, False)
+
+    # # Show
+    # rgb_img = cv2.cvtColor(gray_img, cv2.COLOR_GRAY2RGB)
+    # rgb_img = cv2.drawChessboardCorners(rgb_img, boardSize, corners, found)
+    # cv2.imshow("rgb_img", rgb_img)
+    # cv2.waitKey(0)
