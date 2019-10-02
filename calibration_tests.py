@@ -2,6 +2,7 @@ import apriltag
 import cv2
 import numpy as np
 from scipy.spatial import distance as dist
+from scipy.spatial.transform import Rotation as R
 
 def get_corners(img, boardSize, subpixel = False):
     # Convert to grayscale if its not
@@ -15,8 +16,6 @@ def get_corners(img, boardSize, subpixel = False):
 
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)  # termination criteria
     corners_subpx = cv2.cornerSubPix(img, corners, boardSize, (-1,-1), criteria)  # subpixel accuracy
-
-    # TODO(Oleguer): Detect origin using apriltag and reorient
     return True, corners_subpx
 
 def get_apriltag_center(img):
@@ -55,12 +54,32 @@ def orient(corners_mat, april_pos):
     corners = corners_mat.reshape((n+1)*(n+1), 1, 2)
     return corners
 
+def get_transformation_matrix(boardSize, tileSide, corners_px, image_shape):
+
+    # Get matrix of real positions
+    corners_m = np.zeros((boardSize[0], boardSize[1], 3), np.float32)
+    for i in range(boardSize[0]):
+        for j in range(boardSize[1]):
+            corners_m[i][j] = (i*tileSide, j*tileSide, 0)
+
+    # Compute transformation
+    ret, intrinsics_mat, distortion_coef, rotation_vect, translation_vect =\
+        cv2.calibrateCamera(corners_m, corners_px, image_shape, None, None)
+
+    rot_matrix = R.from_rotvec().as_dcm()
+    transformation_matrix = np.eye(4)
+    transformation_matrix[0:3,0:3] = rot_matrix
+    transformation_matrix[3,0:3] = translation_vect # Msybe transpose this
+    return transformation_matrix  
+
+
 
 if __name__ == "__main__":
     # gray_img = cv2.imread("data/calib_example.png", cv2.IMREAD_GRAYSCALE)
     # apriltag_img = cv2.imread("data/apriltag_example.jpeg", cv2.IMREAD_GRAYSCALE)
     img = cv2.imread("data/collage.png", cv2.IMREAD_GRAYSCALE)
     boardSize = (4, 4)
+    tileSide_m = 0.050
 
     found, corners, apriltag_center = sorted_corners(img, boardSize)
     print(corners.shape)
