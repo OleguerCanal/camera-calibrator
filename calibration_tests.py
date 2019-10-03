@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from scipy.spatial import distance as dist
 from scipy.spatial.transform import Rotation as R
+from scipy.linalg import logm, sqrtm, inv
 
 def get_corners(img, boardSize, subpixel = False):
     # Convert to grayscale if its not
@@ -71,6 +72,33 @@ def get_transformation_matrix(boardSize, tileSide, corners_px, image_shape):
     transformation_matrix[0:3,0:3] = rot_matrix
     transformation_matrix[3,0:3] = translation_vect # Msybe transpose this
     return transformation_matrix  
+
+
+def eye_in_hand(data)
+    '''Solves AX=XB problem using least squares approach
+    '''
+    M = np.zeros((3, 3))
+    for A, B in data:
+        alpha = logm(A[0:3, 0:3])
+        beta = logm(B[0:3, 0:3])
+        M += beta*np.transpose(alpha)
+
+    rot_x = np.dot(inv(sqrtm(np.dot(np.transpose(M), M))), np.transpose(M))
+
+    c = []
+    d = []
+    for A, B in data:
+        c_val = np.eye(3) - A[0:3, 0:3]
+        d_val = A[3, 0:3] - np.dot(rot_x, B[3, 0:3])
+        c.append(c_val)
+        d.append(d_val)
+
+    trans_x = np.dot(np.dot(inv(np.dot(np.transpose(c), c)), np.transpose(c)), d)
+    
+    X = np.eye(4)
+    X[0:3, 0:3] = rot_x 
+    X[3, 0:3] = trans_x 
+    return X
 
 
 
