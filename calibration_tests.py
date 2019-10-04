@@ -4,6 +4,12 @@ import numpy as np
 from scipy.spatial import distance as dist
 from scipy.spatial.transform import Rotation as R
 from scipy.linalg import logm, sqrtm, inv
+import yaml
+
+# class CameraCalibrator():
+#     def __init__(self, board_shape = (3, 4), tile_side = 0.062):
+#         self.board_shape = board_shape
+#         self.tile_side = tile_side
 
 def get_corners(img, boardSize, subpixel = False):
     # Convert to grayscale if its not
@@ -12,16 +18,29 @@ def get_corners(img, boardSize, subpixel = False):
 
     found, corners = cv2.findChessboardCorners(img, boardSize)
 
+    if found:
+        print("Found corners!")
+    else:
+        print("ERROR: Corners not found!")
+
     if not found or not subpixel:
         return found, corners
 
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)  # termination criteria
     corners_subpx = cv2.cornerSubPix(img, corners, boardSize, (-1,-1), criteria)  # subpixel accuracy
+
+
     return True, corners_subpx
 
 def get_apriltag_center(img):
-    detector = apriltag.Detector()
+    # apriltag.
+    options = apriltag.DetectorOptions(families='tag36h10')
+    detector = apriltag.Detector(options=options)
     result = detector.detect(img)
+    if len(result) > 0:
+        print("Found apriltag!")
+    else:
+        return None
     return np.array(result[0].center, dtype=np.int16)
 
 def sorted_corners(img, boardSize):
@@ -29,30 +48,47 @@ def sorted_corners(img, boardSize):
     apriltag_center = get_apriltag_center(img)
     return found, corners, apriltag_center
 
+# TODO:(oleguer) REVIEW THIS!!!
+# TODO:(oleguer) THIS WITH SQUARE!!!
 def orient(corners_mat, april_pos):
     # Get closest corner
     n = corners_mat.shape[0] - 1
+    m = corners_mat.shape[1] - 1
     distances = []
     distances.append(dist.euclidean(april_pos, corners_mat[0][0])) # 0
-    distances.append(dist.euclidean(april_pos, corners_mat[0][n])) # 1
-    distances.append(dist.euclidean(april_pos, corners_mat[n][n])) # 2
+    distances.append(dist.euclidean(april_pos, corners_mat[0][m])) # 1
+    distances.append(dist.euclidean(april_pos, corners_mat[n][m])) # 2
     distances.append(dist.euclidean(april_pos, corners_mat[n][0])) # 3
+    print(distances)
     closest_corner = np.argmin(distances)
+    print(closest_corner)
 
     # Apply needed rotations:
-    for i in range(closest_corner):
+    # for i in range(closest_corner):
+    #     corners_mat = np.rot90(corners_mat)
+
+    # print(corners_mat)
+    if closest_corner == 1:
+        corners_mat = np.rot90(corners_mat, 2).T
+    elif closest_corner == 2:
         corners_mat = np.rot90(corners_mat)
+        corners_mat = np.rot90(corners_mat)
+    elif closest_corner == 3:
+        corners_mat = np.rot90(corners_mat, 2).T
+        corners_mat = np.transpose(corners_mat)
+    # print(corners_mat)
 
     # Need to transpose?
     april_v = (april_pos[0] - corners_mat[0][0][0][0], april_pos[1] - corners_mat[0][0][0][1])
     second_v = (corners_mat[0][1][0][0] - corners_mat[0][0][0][0], corners_mat[0][1][0][1] - corners_mat[0][0][0][1])
-    april_v = april_v/np.linalg.norm(april_v, ord=1)
-    second_v = second_v/np.linalg.norm(second_v, ord=1)
-    if (abs(np.dot(april_v, second_v)) < 0.5):
+    april_v = april_v/np.linalg.norm(april_v, ord = 2)
+    second_v = second_v/np.linalg.norm(second_v, ord = 2)
+    if (abs(np.dot(april_v, second_v)) > 0.5):
+        print("Transposing to correct orientation")
         corners_mat.transpose()
 
     # Return flattened corners
-    corners = corners_mat.reshape((n+1)*(n+1), 1, 2)
+    corners = corners_mat.reshape((n+1)*(m+1), 1, 2)
     return corners
 
 def get_transformation_matrix(boardSize, tileSide, corners_px, image_shape):
@@ -74,7 +110,9 @@ def get_transformation_matrix(boardSize, tileSide, corners_px, image_shape):
     return transformation_matrix  
 
 
-def eye_in_hand(data)
+def
+
+def eye_in_hand(data):
     '''Solves AX=XB problem using least squares approach
     '''
     M = np.zeros((3, 3))
@@ -100,34 +138,37 @@ def eye_in_hand(data)
     X[3, 0:3] = trans_x 
     return X
 
-
-
-if __name__ == "__main__":
-    # gray_img = cv2.imread("data/calib_example.png", cv2.IMREAD_GRAYSCALE)
-    # apriltag_img = cv2.imread("data/apriltag_example.jpeg", cv2.IMREAD_GRAYSCALE)
-    img = cv2.imread("data/collage.png", cv2.IMREAD_GRAYSCALE)
-    boardSize = (4, 4)
-    tileSide_m = 0.050
-
-    found, corners, apriltag_center = sorted_corners(img, boardSize)
-    print(corners.shape)
-    # print(corners)
-    matrix_corners = np.reshape(corners, (boardSize[0], boardSize[1], 1, 2))
-    print(matrix_corners.shape)
-    print(corners)
-    # # Corners stored in a matrix way
-    # corners = np.rot90(corners)
-    # print(corners.shape)
-    # print(corners)
-    corners = orient(matrix_corners, apriltag_center)
-    print(corners.shape)
-    print(corners)
-
-
-
+def plot(img, corners, atag, found=True):
     # Show
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
     cv2.circle(img, (apriltag_center[0], apriltag_center[1]), 5, (0, 0, 255), -1)
     img = cv2.drawChessboardCorners(img, boardSize, corners, found)
     cv2.imshow("img", img)
     cv2.waitKey(0)
+
+if __name__ == "__main__":
+    with open('data/transforms.yaml') as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)
+        print(data["exp" + str(1)]["Translation"])
+        print(data["exp" + str(1)]["Rotation"])
+
+    # for i in range(1, 7):
+    # img = cv2.imread("data/" + str(1) + ".png", cv2.IMREAD_GRAYSCALE)
+
+    
+
+    # # img = cv2.resize(img, (214, 175), interpolation = cv2.INTER_AREA)
+    # # cv2.imshow("img", img)
+    # # cv2.waitKey(0)
+    # boardSize = (3, 4)
+    # tileSide_m = 0.062
+
+    # found, corners, apriltag_center = sorted_corners(img, boardSize)
+
+    # plot(img, corners, apriltag_center, found)
+
+
+    # matrix_corners = np.reshape(corners, (boardSize[0], boardSize[1], 1, 2))
+    # corners = orient(matrix_corners, apriltag_center)
+
+    # plot(img, corners, apriltag_center, found)   
