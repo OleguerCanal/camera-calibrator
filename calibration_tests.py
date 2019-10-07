@@ -7,10 +7,19 @@ from scipy.linalg import logm, sqrtm, inv
 import yaml
 
 class CameraCalibrator():
-    def __init__(self, board_shape = (3, 4), tile_side = 0.062, apriltag_families = 'tag36h10'):
+    def __init__(self, board_shape = (3, 4), tile_side = 0.062, apriltag_families = "tag36h10"):
         self.board_shape = board_shape
         self.tile_side = tile_side
         self.apriltag_families = apriltag_families
+
+    def transquat_to_mat(self, translation, quaternion):
+        ''' Given a translation vector and a quaternion returns transformation matrix
+        '''
+        M = np.eye(4)
+        rot_matrix = R.from_quat(quaternion).as_dcm()
+        M[0:3,0:3] = rot_matrix
+        M[3, 0:3] = translation
+        return M
 
     #TODO(oleguer): Return intrinsics as well
     def get_extrinsics(self, image):
@@ -41,13 +50,13 @@ class CameraCalibrator():
         # 5. Compute transformation
         ret, intrinsics_mat, distortion_coef, rotation_vect, translation_vect =\
             cv2.calibrateCamera(corners_m, corners_px, image_shape, None, None)
-        rot_matrix = R.from_rotvec().as_dcm()
+        rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
         transformation_matrix = np.eye(4)
         transformation_matrix[0:3,0:3] = rot_matrix
         transformation_matrix[3,0:3] = translation_vect #TODO(oleguer): Maybe transpose this
         return transformation_matrix
 
-    def eye_in_hand(self, transforms, images):
+    def eye_in_hand_finetunning(self, transforms, images):
         ''' Given a list of rough transformations (Ai) and a list of corresponding checkerboard images
             returns transformation correction from Ai to real camera position
         '''
@@ -180,29 +189,23 @@ class CameraCalibrator():
         return corners
 
 if __name__ == "__main__":
+    # Load sample transforms
     with open('data/transforms.yaml') as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
+        transforms_data = yaml.load(f, Loader=yaml.FullLoader)
         print(data["exp" + str(1)]["Translation"])
-        print(data["exp" + str(1)]["Rotation"])
-
-
-    # for i in range(1, 7):
-    # img = cv2.imread("data/" + str(1) + ".png", cv2.IMREAD_GRAYSCALE)
-
+        print(data["exp" + str(1)]["Quaternion"])
     
+    # Instantiate class
+    calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
 
-    # # img = cv2.resize(img, (214, 175), interpolation = cv2.INTER_AREA)
-    # # cv2.imshow("img", img)
-    # # cv2.waitKey(0)
-    # boardSize = (3, 4)
-    # tileSide_m = 0.062
+    transforms = []
+    images = []
+    for i in range(1, 7):
+        image = cv2.imread("data/" + str(i) + ".png", cv2.IMREAD_GRAYSCALE)
+        trans = transforms_data["exp" + str(i)]["Translation"]
+        quat = transforms_data["exp" + str(i)]["Quaternion"]
+        transforms_data.append(calib.transquat_to_mat(trans, quat))
+        images.append(image)
 
-    # found, corners, apriltag_center = sorted_corners(img, boardSize)
-
-    # plot(img, corners, apriltag_center, found)
-
-
-    # matrix_corners = np.reshape(corners, (boardSize[0], boardSize[1], 1, 2))
-    # corners = orient(matrix_corners, apriltag_center)
-
-    # plot(img, corners, apriltag_center, found)   
+    X = calib.eye_in_hand_finetunning(transforms, images)
+    
