@@ -48,8 +48,8 @@ class CameraCalibrator():
                 corners_m.append([i*self.tile_side, j*self.tile_side, 0])
         corners_m = [np.array(corners_m, dtype=np.float32)]
 
-        print(corners_m)
-        print(self.corners)
+        # print(corners_m)
+        # print(self.corners)
         self.plot()
 
         # 5. Compute transformation
@@ -62,8 +62,8 @@ class CameraCalibrator():
         transformation_matrix = np.eye(4)
         transformation_matrix[0:3,0:3] = rot_matrix
         transformation_matrix[0:3, 3] = translation_vect #TODO(oleguer): Maybe transpose this
-        # return np.linalg.inv(transformation_matrix)
-        return transformation_matrix
+        return np.linalg.inv(transformation_matrix)  # From checkerboard to camera
+        # return transformation_matrix  # From camera to checkerboard
 
     def eye_in_hand_finetunning(self, transforms, images):
         ''' Given a list of rough transformations (Ai) and a list of corresponding checkerboard images
@@ -74,8 +74,8 @@ class CameraCalibrator():
         for image in images: 
             B_i = self.get_extrinsics(image)
             print(B_i)
-            a = raw_input()
             B_is.append(B_i)
+        a = raw_input()
         
 
         # 2. Combine all A_is, B_is to create all possible A, B
