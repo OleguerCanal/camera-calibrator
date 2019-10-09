@@ -4,6 +4,7 @@ import numpy as np
 from scipy.spatial import distance as dist
 from scipy.spatial.transform import Rotation as R
 from scipy.linalg import logm, sqrtm, inv, expm
+from scipy.optimize import minimize
 import yaml
 
 class CameraCalibrator():
@@ -22,8 +23,8 @@ class CameraCalibrator():
         return M
 
     #TODO(oleguer): Return intrinsics as well
-    def get_extrinsics(self, image):
-        '''Given checkerboard+apriltag image, returns extrinsics:
+    def get_extrinsics_2D(self, image):
+        '''Given checkerboard+apriltag 2D image, returns extrinsics:
         transformation matrix from checkerboard to camera frame
         '''
         # 0. Reset debug variables: TODO(oleguer): Remove this when everything works
@@ -36,7 +37,7 @@ class CameraCalibrator():
         self.found, unoriented_corners = self.__get_corners(image)
 
         # 2. Get apriltag center
-        self.apriltag_center = self.__get_apriltag_center(image)
+        self.apriltag_center = self.get_apriltag_center(image)
 
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
@@ -58,12 +59,20 @@ class CameraCalibrator():
         rotation_vect = np.array(rotation_vect).reshape(3)
         translation_vect = np.array(translation_vect).reshape(3)
 
+        # From camera to checkerboard
         rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
-        transformation_matrix = np.eye(4)
-        transformation_matrix[0:3,0:3] = rot_matrix
-        transformation_matrix[0:3, 3] = translation_vect #TODO(oleguer): Maybe transpose this
-        return np.linalg.inv(transformation_matrix)  # From checkerboard to camera
-        # return transformation_matrix  # From camera to checkerboard
+        camera_to_chackerboard = np.eye(4)
+        camera_to_chackerboard[0:3,0:3] = rot_matrix
+        camera_to_chackerboard[0:3, 3] = translation_vect
+        
+        # From checkerboard to camera
+        chackerboard_to_camera = np.eye(4)
+        chackerboard_to_camera[0:3,0:3] = rot_matrix.T
+        chackerboard_to_camera[0:3, 3] = -translation_vect
+        return chackerboard_to_camera
+
+    def get_extrinsics_3D(self, image, xyz_matrix):
+        pass
 
     def eye_in_hand_finetunning(self, transforms, images):
         ''' Given a list of rough transformations (Ai) and a list of corresponding checkerboard images
@@ -75,7 +84,7 @@ class CameraCalibrator():
             B_i = self.get_extrinsics(image)
             print(B_i)
             B_is.append(B_i)
-        a = raw_input()
+        # a = raw_input()
         
 
         # 2. Combine all A_is, B_is to create all possible A, B
@@ -149,6 +158,15 @@ class CameraCalibrator():
         cv2.waitKey(0)
 
     # PRIVATE
+    def __find_transformation(self, set1, set2):
+        ''' Returns transformation matrix between two sets of points
+        '''
+        def objective(values):
+            rot = np.resape(values[:9], (3, 3))
+            trans = values[8:]
+            
+            return np.norm()
+
     def __get_corners(self, img, subpixel = False):
         '''Given image returns list of checker corners
         '''
@@ -170,7 +188,7 @@ class CameraCalibrator():
         corners_subpx = cv2.cornerSubPix(img, corners, self.board_shape, (-1,-1), criteria)  # subpixel accuracy
         return True, corners_subpx
 
-    def __get_apriltag_center(self, img):
+    def get_apriltag_center(self, img):
         options = apriltag.DetectorOptions(families=self.apriltag_families)
         detector = apriltag.Detector(options=options)
         result = detector.detect(img)
@@ -227,22 +245,28 @@ class CameraCalibrator():
 
 if __name__ == "__main__":
     # Load sample transforms
-    with open('data/transforms.yaml') as f:
-        transforms_data = yaml.load(f, Loader=yaml.FullLoader)
+    # with open('data/transforms.yaml') as f:
+    #     transforms_data = yaml.load(f, Loader=yaml.FullLoader)
     
-    # Instantiate CameraCalibration class
+    # # Instantiate CameraCalibration class
+    # calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
+
+    # # Prepare transforms, images data
+    # transforms = []
+    # images = []
+    # for i in range(1, 7):
+    #     if i == 3 or i == 4:
+    #         continue
+    #     image = cv2.imread("data/" + str(i) + ".png", cv2.IMREAD_GRAYSCALE)
+    #     trans = transforms_data["exp" + str(i)]["Translation"]
+    #     quat = transforms_data["exp" + str(i)]["Quaternion"]
+    #     transforms.append(calib.transquat_to_mat(trans, quat))
+    #     images.append(image)
+
+    # # Get X (finetunning matrix)
+    # X = calib.eye_in_hand_finetunning(transforms, images)
+    # print(X)
+
     calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
-
-    # Prepare transforms, images data
-    transforms = []
-    images = []
-    for i in range(1, 7):
-        image = cv2.imread("data/" + str(i) + ".png", cv2.IMREAD_GRAYSCALE)
-        trans = transforms_data["exp" + str(i)]["Translation"]
-        quat = transforms_data["exp" + str(i)]["Quaternion"]
-        transforms.append(calib.transquat_to_mat(trans, quat))
-        images.append(image)
-
-    # Get X (finetunning matrix)
-    X = calib.eye_in_hand_finetunning(transforms, images)
-    print(X)    
+    image = cv2.imread("data/new.png", cv2.IMREAD_GRAYSCALE)
+    print(calib.get_apriltag_center(image))
