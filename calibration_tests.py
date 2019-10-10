@@ -5,6 +5,7 @@ from scipy.spatial import distance as dist
 from scipy.spatial.transform import Rotation as R
 from scipy.linalg import logm, sqrtm, inv, expm
 from scipy.optimize import minimize
+from math import sqrt
 import yaml
 
 class CameraCalibrator():
@@ -33,7 +34,7 @@ class CameraCalibrator():
         self.apriltag = None
         self.image = image
 
-        # 1. Get checkerbard corners in pixel position
+        # 1. Get chessboard corners in pixel position
         self.found, unoriented_corners = self.__get_corners(image)
 
         # 2. Get apriltag center
@@ -42,7 +43,7 @@ class CameraCalibrator():
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
 
-        # 4. Get matrix of real positions
+        # 4. Get matrix of chessboard frame values
         corners_m = []
         for i in range(self.board_shape[1]): #TODO(oleguer): Review board_shape params!
             for j in range(self.board_shape[0]):
@@ -51,7 +52,7 @@ class CameraCalibrator():
 
         # print(corners_m)
         # print(self.corners)
-        self.plot()
+        # self.plot()
 
         # 5. Compute transformation
         ret, intrinsics_mat, distortion_coef, rotation_vect, translation_vect =\
@@ -61,18 +62,65 @@ class CameraCalibrator():
 
         # From camera to checkerboard
         rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
-        camera_to_chackerboard = np.eye(4)
-        camera_to_chackerboard[0:3,0:3] = rot_matrix
-        camera_to_chackerboard[0:3, 3] = translation_vect
+        camera_to_chessboard = np.eye(4)
+        camera_to_chessboard[0:3,0:3] = rot_matrix
+        camera_to_chessboard[0:3, 3] = translation_vect
         
         # From checkerboard to camera
-        chackerboard_to_camera = np.eye(4)
-        chackerboard_to_camera[0:3,0:3] = rot_matrix.T
-        chackerboard_to_camera[0:3, 3] = -translation_vect
-        return chackerboard_to_camera
+        chessboard_to_camera = np.eye(4)
+        chessboard_to_camera[0:3,0:3] = rot_matrix.T
+        chessboard_to_camera[0:3, 3] = -translation_vect
+        return chessboard_to_camera
 
-    def get_extrinsics_3D(self, image, xyz_matrix):
-        pass
+    def get_extrinsics_3D(self, image, xyz_coordinates_matrix):
+        ''' Given image of a checkerboard with apriltag and xyz_coordinates_matrix,
+            Returns transformation matrix from checkerboard to camera frame
+            
+            xyz_coordinates_matrix meaning: a 3 channel numpy array where:
+            channel 0: x coordinates
+            channel 1: y coordinates
+            channel 3: z coordinates
+            NOTE: Make sure the channels are in the rigth order!!!! 
+
+            (Use this if you have a 3D sensor, otherwise use get_extrinsics_2D)
+        '''
+        # 0. Reset debug variables: TODO(oleguer): Remove this when everything works
+        self.found = False
+        self.corners = []
+        self.apriltag = None
+        self.image = image
+
+        # 1. Get checkerbard corners in pixel position
+        self.found, unoriented_corners = self.__get_corners(image)
+
+        # 2. Get apriltag center
+        self.apriltag_center = self.get_apriltag_center(image)
+
+        # 3. Orient corners
+        self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
+
+        # 4.Get matrix of camera frame values
+        corners_camera = []
+        for corner in self.corners:
+            corner = corner[0]
+            x = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][0]
+            y = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][1]
+            z = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][2]
+            corner_camera = [x, y, z]
+            corners_camera.append(corner_camera)
+
+        # 5. Get matrix of chessboard frame values
+        corners_chessboard = []
+        for i in range(self.board_shape[1]): #TODO(oleguer): Review board_shape params!
+            for j in range(self.board_shape[0]):
+                corners_chessboard.append([i*self.tile_side, j*self.tile_side, 0])
+
+        corners_camera = np.array(corners_camera)
+        corners_chessboard = np.array(corners_chessboard)
+        print(corners_camera.shape)
+        print(corners_chessboard.shape)
+        chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)
+        return chessboard_to_camera
 
     def eye_in_hand_finetunning(self, transforms, images):
         ''' Given a list of rough transformations (Ai) and a list of corresponding checkerboard images
@@ -158,14 +206,32 @@ class CameraCalibrator():
         cv2.waitKey(0)
 
     # PRIVATE
-    def __find_transformation(self, set1, set2):
-        ''' Returns transformation matrix between two sets of points
+    def __rigid_transform_3D(self, A, B):
+        ''' Returns transformation matrix between two sets of 3D points
         '''
-        def objective(values):
-            rot = np.resape(values[:9], (3, 3))
-            trans = values[8:]
-            
-            return np.norm()
+        assert len(A) == len(B)
+        N = A.shape[0]; # total points
+        centroid_A = np.mean(A, axis=0)
+        centroid_B = np.mean(B, axis=0)
+
+        # centre the points
+        AA = A - np.tile(centroid_A, (N, 1))
+        BB = B - np.tile(centroid_B, (N, 1))
+        H = np.dot(AA.T, BB)
+        U, S, Vt = np.linalg.svd(H)
+        R = np.dot(Vt.T, U.T)
+
+        # special reflection case
+        if np.linalg.det(R) < 0:
+            print("Reflection detected")
+            Vt[2,:] *= -1
+            R = np.dot(Vt.T, U.T)
+        t = -np.dot(R,centroid_A) + centroid_B.T
+        
+        M = np.eye(4)
+        M[0:3, 0:3] = R
+        M[0:3, 3] = t
+        return M
 
     def __get_corners(self, img, subpixel = False):
         '''Given image returns list of checker corners
@@ -267,6 +333,23 @@ if __name__ == "__main__":
     # X = calib.eye_in_hand_finetunning(transforms, images)
     # print(X)
 
-    calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
-    image = cv2.imread("data/new.png", cv2.IMREAD_GRAYSCALE)
-    print(calib.get_apriltag_center(image))
+    # Test apriltag
+    # calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
+    # image = cv2.imread("data/new.png", cv2.IMREAD_GRAYSCALE)
+    # print(calib.get_apriltag_center(image))
+
+    # Test 3d calibration
+    calib = CameraCalibrator(board_shape=(6, 7), tile_side=0.062, apriltag_families="tag36h10")
+    image = cv2.imread("data/test2/amplitude3.png", cv2.IMREAD_GRAYSCALE)
+    xyz_coordinates_matrix = np.load("data/test2/xyz.npy")
+    M_2d = calib.get_extrinsics_2D(image)
+    calib.plot()
+    # Fix order
+    xyz_coordinates_matrix_ordered = xyz_coordinates_matrix
+    xyz_coordinates_matrix_ordered[:, :, 0] = xyz_coordinates_matrix[:, :, 1]
+    xyz_coordinates_matrix_ordered[:, :, 1] = xyz_coordinates_matrix[:, :, 2]
+    xyz_coordinates_matrix_ordered[:, :, 2] = xyz_coordinates_matrix[:, :, 0]
+    M_3d = calib.get_extrinsics_3D(image, xyz_coordinates_matrix_ordered)
+    print(M_2d)
+    print("·")
+    print(M_3d)
