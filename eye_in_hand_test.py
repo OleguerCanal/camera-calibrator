@@ -1,4 +1,8 @@
 from camera_calibrator import CameraCalibrator
+import yaml
+import cv2
+import numpy as np
+
 
 if __name__ == "__main__":
     # Load sample transforms
@@ -11,7 +15,7 @@ if __name__ == "__main__":
     # Prepare transforms, images data
     transforms = []
     images = []
-    for i in range(1, 7):
+    for i in range(2, 7):
         if i == 3 or i == 4:
             continue
         image = cv2.imread("data/" + str(i) + ".png", cv2.IMREAD_GRAYSCALE)
@@ -23,8 +27,3 @@ if __name__ == "__main__":
     # Get X (finetunning matrix)
     X = calib.eye_in_hand_finetunning(transforms, images)
     print(X)
-
-    Test apriltag
-    calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
-    image = cv2.imread("data/new.png", cv2.IMREAD_GRAYSCALE)
-    print(calib.get_apriltag_center(image))

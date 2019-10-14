@@ -6,7 +6,6 @@ from scipy.spatial.transform import Rotation as R
 from scipy.linalg import logm, sqrtm, inv, expm
 from scipy.optimize import minimize
 from math import sqrt
-import yaml
 from utils.rigid_trans_test import rigid_transform_3D  #TODO(oleguer): Remove that
 
 class CameraCalibrator():
@@ -25,7 +24,7 @@ class CameraCalibrator():
         return M
 
     #TODO(oleguer): Return intrinsics as well
-    def get_extrinsics_2D(self, image):
+    def chessboard_extrinsics_2D(self, image):
         '''Given checkerboard+apriltag 2D image, returns extrinsics:
         transformation matrix from checkerboard to camera frame
         '''
@@ -47,9 +46,9 @@ class CameraCalibrator():
             cv2.calibrateCamera(corners_m, [self.corners], self.image.shape[::-1], None, None)
         rotation_vect = np.array(rotation_vect).reshape(3)
         translation_vect = np.array(translation_vect).reshape(3)
+        rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
 
         # From camera to checkerboard
-        # rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
         # camera_to_chessboard = np.eye(4)
         # camera_to_chessboard[0:3,0:3] = rot_matrix
         # camera_to_chessboard[0:3, 3] = translation_vect
@@ -60,7 +59,7 @@ class CameraCalibrator():
         chessboard_to_camera[0:3, 3] = -translation_vect
         return chessboard_to_camera
 
-    def get_extrinsics_3D(self, image, xyz_coordinates_matrix):
+    def chessboard_extrinsics_3D(self, image, xyz_coordinates_matrix):
         ''' Given image of a checkerboard with apriltag and xyz_coordinates_matrix,
             Returns transformation matrix from checkerboard to camera frame
             
@@ -103,29 +102,29 @@ class CameraCalibrator():
         # 1. Compute all B_i matrices
         B_is = []
         for image in images: 
-            B_i = self.get_extrinsics(image)
+            B_i = self.chessboard_extrinsics_2D(image)
             print(B_i)
-            B_is.append(B_i)
-        # a = raw_input()
-        
+            B_is.append(B_i)        
 
         # 2. Combine all A_is, B_is to create all possible A, B
         zipped_ABs = []
         for i in range(0, len(transforms)):
             for j in range(i+1, len(transforms)):
-                A_i = transforms[i]
-                A_j = transforms[j]
-                A = np.dot(np.linalg.inv(A_i), A_j)  # TODO(Oleguer): Review this
-                B_i = B_is[i]
-                B_j = B_is[j]
-                B = np.dot(np.linalg.inv(B_i), B_j)  # TODO(Oleguer): Review this
+                A_i = np.mat(transforms[i])
+                A_j = np.mat(transforms[j])
+                A = np.linalg.inv(A_i)*A_j
+                B_i = np.mat(B_is[i])
+                B_j = np.mat(B_is[j])
+                B = np.linalg.inv(B_i)*B_j  # TODO(Oleguer): Review this
                 zipped_ABs.append((A, B))
+
+        print(len(zipped_ABs))
 
         # 3. Solve AX=XB problem
         M = np.zeros((3, 3))
         for A, B in zipped_ABs:
-            alpha = logm(A[0:3, 0:3])
-            beta = logm(B[0:3, 0:3])
+            alpha = np.mat(logm(A[0:3, 0:3]))
+            beta = np.mat(logm(B[0:3, 0:3]))
             M += beta*alpha.T
         rot_x = np.dot(inv(sqrtm(np.dot(M.T, M))), M.T)  # Theta_x
         print("M: ")
@@ -134,30 +133,29 @@ class CameraCalibrator():
         print(rot_x)
 
         #TODO(oleguer): Take a look at this we shouldnt be taking average but the multiplication commented down below
-        trans_x = np.zeros((3, 1), dtype=np.float32)
-        for A, B in zipped_ABs:
-            c_val = np.eye(3) - A[0:3, 0:3]
-            print("A:")
-            print(A)
-            print("dot:")
-            print(np.dot(rot_x, B[0:3, 3]))
-            d_val = A[0:3, 3] - np.dot(rot_x, B[0:3, 3])
-            print(c_val)
-            print(d_val)
-            print(np.dot(np.linalg.inv(c_val), d_val))
-            trans_x += np.dot(np.linalg.inv(c_val), d_val).T
-        trans_x = trans_x/len(zipped_ABs)
-
-        #OLD CODE WHICH SHOULD BE BETTER
-        # c = []
-        # d = []
+        # trans_x = np.zeros((3, 1), dtype=np.float32)
         # for A, B in zipped_ABs:
         #     c_val = np.eye(3) - A[0:3, 0:3]
+        #     print("A:")
+        #     print(A)
+        #     print("dot:")
+        #     print(np.dot(rot_x, B[0:3, 3]))
         #     d_val = A[0:3, 3] - np.dot(rot_x, B[0:3, 3])
-        #     c.append(c_val)
-        #     d.append(d_val)
-            
-        
+        #     print(c_val)
+        #     print(d_val)
+        #     print(np.dot(np.linalg.inv(c_val), d_val))
+        #     trans_x += np.dot(np.linalg.inv(c_val), d_val).T
+        # trans_x = trans_x/len(zipped_ABs)
+
+        #OLD CODE WHICH SHOULD BE BETTER
+        c = []
+        d = []
+        for A, B in zipped_ABs:
+            c_val = np.eye(3) - A[0:3, 0:3]
+            d_val = A[0:3, 3] - np.dot(rot_x, B[0:3, 3])
+            c.append(c_val)
+            d.append(d_val)
+
         # c = np.array(c, dtype=np.float32)
         # d = np.array(d, dtype=np.float32)
         # print(c.shape)
@@ -213,7 +211,7 @@ class CameraCalibrator():
         M[0:3, 3] = t.flatten()
         return M
 
-    def __get_oriented_corners(self, img):
+    def __get_oriented_corners(self, image):
         # 0. Reset debug variables: TODO(oleguer): Remove this when everything works
         self.found = False
         self.corners = []
