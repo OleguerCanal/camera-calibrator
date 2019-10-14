@@ -7,6 +7,7 @@ from scipy.linalg import logm, sqrtm, inv, expm
 from scipy.optimize import minimize
 from math import sqrt
 import yaml
+from utils.rigid_trans_test import rigid_transform_3D  #TODO(oleguer): Remove that
 
 class CameraCalibrator():
     def __init__(self, board_shape = (3, 4), tile_side = 0.062, apriltag_families = "tag36h10"):
@@ -209,28 +210,34 @@ class CameraCalibrator():
     def __rigid_transform_3D(self, A, B):
         ''' Returns transformation matrix between two sets of 3D points
         '''
-        assert len(A) == len(B)
-        N = A.shape[0]; # total points
-        centroid_A = np.mean(A, axis=0)
-        centroid_B = np.mean(B, axis=0)
 
-        # centre the points
-        AA = A - np.tile(centroid_A, (N, 1))
-        BB = B - np.tile(centroid_B, (N, 1))
-        H = np.dot(AA.T, BB)
-        U, S, Vt = np.linalg.svd(H)
-        R = np.dot(Vt.T, U.T)
+        A = np.mat(A)
+        B = np.mat(B)
+        # assert len(A) == len(B)
+        # N = A.shape[0]; # total points
+        # centroid_A = np.mean(A, axis=0)
+        # centroid_B = np.mean(B, axis=0)
 
-        # special reflection case
-        if np.linalg.det(R) < 0:
-            print("Reflection detected")
-            Vt[2,:] *= -1
-            R = np.dot(Vt.T, U.T)
-        t = -np.dot(R,centroid_A) + centroid_B.T
+        # # centre the points
+        # AA = A - np.tile(centroid_A, (N, 1))
+        # BB = B - np.tile(centroid_B, (N, 1))
+        # H = np.dot(AA.T, BB)
+        # U, S, Vt = np.linalg.svd(H)
+        # R = np.dot(Vt.T, U.T)
+
+        # # special reflection case
+        # if np.linalg.det(R) < 0:
+        #     print("Reflection detected")
+        #     Vt[2,:] *= -1
+        #     R = np.dot(Vt.T, U.T)
+        # t = -np.dot(R,centroid_A) + centroid_B.T
         
+        # TODO(oleguer): Implement it here
+        R, t = rigid_transform_3D(A, B)
+
         M = np.eye(4)
         M[0:3, 0:3] = R
-        M[0:3, 3] = t
+        M[0:3, 3] = t.flatten()
         return M
 
     def __get_corners(self, img, subpixel = False):
@@ -310,46 +317,4 @@ class CameraCalibrator():
         return corners
 
 if __name__ == "__main__":
-    # Load sample transforms
-    # with open('data/transforms.yaml') as f:
-    #     transforms_data = yaml.load(f, Loader=yaml.FullLoader)
-    
-    # # Instantiate CameraCalibration class
-    # calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
-
-    # # Prepare transforms, images data
-    # transforms = []
-    # images = []
-    # for i in range(1, 7):
-    #     if i == 3 or i == 4:
-    #         continue
-    #     image = cv2.imread("data/" + str(i) + ".png", cv2.IMREAD_GRAYSCALE)
-    #     trans = transforms_data["exp" + str(i)]["Translation"]
-    #     quat = transforms_data["exp" + str(i)]["Quaternion"]
-    #     transforms.append(calib.transquat_to_mat(trans, quat))
-    #     images.append(image)
-
-    # # Get X (finetunning matrix)
-    # X = calib.eye_in_hand_finetunning(transforms, images)
-    # print(X)
-
-    # Test apriltag
-    # calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
-    # image = cv2.imread("data/new.png", cv2.IMREAD_GRAYSCALE)
-    # print(calib.get_apriltag_center(image))
-
-    # Test 3d calibration
-    calib = CameraCalibrator(board_shape=(6, 7), tile_side=0.062, apriltag_families="tag36h10")
-    image = cv2.imread("data/test2/amplitude3.png", cv2.IMREAD_GRAYSCALE)
-    xyz_coordinates_matrix = np.load("data/test2/xyz.npy")
-    M_2d = calib.get_extrinsics_2D(image)
-    calib.plot()
-    # Fix order
-    xyz_coordinates_matrix_ordered = xyz_coordinates_matrix
-    xyz_coordinates_matrix_ordered[:, :, 0] = xyz_coordinates_matrix[:, :, 1]
-    xyz_coordinates_matrix_ordered[:, :, 1] = xyz_coordinates_matrix[:, :, 2]
-    xyz_coordinates_matrix_ordered[:, :, 2] = xyz_coordinates_matrix[:, :, 0]
-    M_3d = calib.get_extrinsics_3D(image, xyz_coordinates_matrix_ordered)
-    print(M_2d)
-    print("·")
-    print(M_3d)
+    pass
