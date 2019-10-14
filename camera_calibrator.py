@@ -29,22 +29,9 @@ class CameraCalibrator():
         '''Given checkerboard+apriltag 2D image, returns extrinsics:
         transformation matrix from checkerboard to camera frame
         '''
-        # 0. Reset debug variables: TODO(oleguer): Remove this when everything works
-        self.found = False
-        self.corners = []
-        self.apriltag = None
-        self.image = image
+        self.corners = self.__get_oriented_corners(image)
 
-        # 1. Get chessboard corners in pixel position
-        self.found, unoriented_corners = self.__get_corners(image)
-
-        # 2. Get apriltag center
-        self.apriltag_center = self.get_apriltag_center(image)
-
-        # 3. Orient corners
-        self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
-
-        # 4. Get matrix of chessboard frame values
+        # 2. Get matrix of chessboard frame values
         corners_m = []
         for i in range(self.board_shape[1]): #TODO(oleguer): Review board_shape params!
             for j in range(self.board_shape[0]):
@@ -55,17 +42,17 @@ class CameraCalibrator():
         # print(self.corners)
         # self.plot()
 
-        # 5. Compute transformation
+        # 3. Compute transformation
         ret, intrinsics_mat, distortion_coef, rotation_vect, translation_vect =\
             cv2.calibrateCamera(corners_m, [self.corners], self.image.shape[::-1], None, None)
         rotation_vect = np.array(rotation_vect).reshape(3)
         translation_vect = np.array(translation_vect).reshape(3)
 
         # From camera to checkerboard
-        rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
-        camera_to_chessboard = np.eye(4)
-        camera_to_chessboard[0:3,0:3] = rot_matrix
-        camera_to_chessboard[0:3, 3] = translation_vect
+        # rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
+        # camera_to_chessboard = np.eye(4)
+        # camera_to_chessboard[0:3,0:3] = rot_matrix
+        # camera_to_chessboard[0:3, 3] = translation_vect
         
         # From checkerboard to camera
         chessboard_to_camera = np.eye(4)
@@ -85,22 +72,10 @@ class CameraCalibrator():
 
             (Use this if you have a 3D sensor, otherwise use get_extrinsics_2D)
         '''
-        # 0. Reset debug variables: TODO(oleguer): Remove this when everything works
-        self.found = False
-        self.corners = []
-        self.apriltag = None
-        self.image = image
+        # 1. Get oriented corners
+        self.corners = self.__get_oriented_corners(image)
 
-        # 1. Get checkerbard corners in pixel position
-        self.found, unoriented_corners = self.__get_corners(image)
-
-        # 2. Get apriltag center
-        self.apriltag_center = self.get_apriltag_center(image)
-
-        # 3. Orient corners
-        self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
-
-        # 4.Get matrix of camera frame values
+        # 2. Get matrix of camera frame values
         corners_camera = []
         for corner in self.corners:
             corner = corner[0]
@@ -110,7 +85,7 @@ class CameraCalibrator():
             corner_camera = [x, y, z]
             corners_camera.append(corner_camera)
 
-        # 5. Get matrix of chessboard frame values
+        # 3. Get matrix of chessboard frame values
         corners_chessboard = []
         for i in range(self.board_shape[1]): #TODO(oleguer): Review board_shape params!
             for j in range(self.board_shape[0]):
@@ -118,9 +93,7 @@ class CameraCalibrator():
 
         corners_camera = np.array(corners_camera)
         corners_chessboard = np.array(corners_chessboard)
-        print(corners_camera.shape)
-        print(corners_chessboard.shape)
-        chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)
+        chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)  #TODO(oleguer): Maybe swap this
         return chessboard_to_camera
 
     def eye_in_hand_finetunning(self, transforms, images):
@@ -239,6 +212,20 @@ class CameraCalibrator():
         M[0:3, 0:3] = R
         M[0:3, 3] = t.flatten()
         return M
+
+    def __get_oriented_corners(self, img):
+        # 0. Reset debug variables: TODO(oleguer): Remove this when everything works
+        self.found = False
+        self.corners = []
+        self.apriltag = None
+        self.image = image
+        # 1. Get chessboard corners in pixel position
+        self.found, unoriented_corners = self.__get_corners(image)
+        # 2. Get apriltag center
+        self.apriltag_center = self.get_apriltag_center(image)
+        # 3. Orient corners
+        self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
+        return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
 
     def __get_corners(self, img, subpixel = False):
         '''Given image returns list of checker corners
