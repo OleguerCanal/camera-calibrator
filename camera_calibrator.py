@@ -92,81 +92,154 @@ class CameraCalibrator():
 
         corners_camera = np.array(corners_camera)
         corners_chessboard = np.array(corners_chessboard)
-        chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)  #TODO(oleguer): Maybe swap this
+        chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)
         return chessboard_to_camera
 
-    def eye_in_hand_finetunning(self, transforms, images):
-        ''' Given a list of rough transformations (Ai) and a list of corresponding checkerboard images
-            returns transformation correction from Ai to real camera position
+    def eye_in_hand_finetunning(self, Ta_is, Tb_is):
+        ''' 
         '''
-        # 1. Compute all B_i matrices
-        B_is = []
-        for image in images: 
-            B_i = self.chessboard_extrinsics_2D(image)
-            print(B_i)
-            B_is.append(B_i)        
+        ABs = []
+        for i in range(0, len(Ta_is)):
+            for j in range(i+1, len(Ta_is)):
+                A_i = np.mat(Ta_is[i])
+                A_j = np.mat(Ta_is[j])
+                A = inv(A_i)*A_j
+                B_i = np.mat(Tb_is[i])
+                B_j = np.mat(Tb_is[j])
+                B = inv(B_i)*B_j  # TODO(Oleguer): Review this
+                ABs.append((A, B))
 
-        # 2. Combine all A_is, B_is to create all possible A, B
-        zipped_ABs = []
-        for i in range(0, len(transforms)):
-            for j in range(i+1, len(transforms)):
-                A_i = np.mat(transforms[i])
-                A_j = np.mat(transforms[j])
-                A = np.linalg.inv(A_i)*A_j
-                B_i = np.mat(B_is[i])
-                B_j = np.mat(B_is[j])
-                B = np.linalg.inv(B_i)*B_j  # TODO(Oleguer): Review this
-                zipped_ABs.append((A, B))
+        return self.solve_axxb(ABs)
 
-        print(len(zipped_ABs))
-
+    def solve_axxb(self, ABs): #TODO(oleguer): Refactor this!!
+        def get_repr_vect(mat):
+            return np.mat((mat[2, 1], -mat[2, 0], mat[1, 0]))
+        
         # 3. Solve AX=XB problem
-        M = np.zeros((3, 3))
-        for A, B in zipped_ABs:
-            alpha = np.mat(logm(A[0:3, 0:3]))
-            beta = np.mat(logm(B[0:3, 0:3]))
-            M += beta*alpha.T
-        rot_x = np.dot(inv(sqrtm(np.dot(M.T, M))), M.T)  # Theta_x
+        M = np.mat(np.zeros((3, 3)))
+        for A, B in ABs:
+            A = np.mat(A)
+            B = np.mat(B)
+            alpha_m = logm(A[0:3, 0:3])
+            alpha_v = np.mat(get_repr_vect(alpha_m))
+            beta_m = logm(np.mat(B[0:3, 0:3]))
+            beta_v = np.mat(get_repr_vect(beta_m))
+            # print(beta_v.T)
+            # print(alpha_v)
+            M += beta_v.T*alpha_v
+            # print(M)
         print("M: ")
         print(M)
+        rot_x = sqrtm(inv(M.T*M))*M.T
         print("rot_x: ")
         print(rot_x)
 
-        #TODO(oleguer): Take a look at this we shouldnt be taking average but the multiplication commented down below
-        # trans_x = np.zeros((3, 1), dtype=np.float32)
-        # for A, B in zipped_ABs:
-        #     c_val = np.eye(3) - A[0:3, 0:3]
-        #     print("A:")
-        #     print(A)
-        #     print("dot:")
-        #     print(np.dot(rot_x, B[0:3, 3]))
-        #     d_val = A[0:3, 3] - np.dot(rot_x, B[0:3, 3])
-        #     print(c_val)
-        #     print(d_val)
-        #     print(np.dot(np.linalg.inv(c_val), d_val))
-        #     trans_x += np.dot(np.linalg.inv(c_val), d_val).T
-        # trans_x = trans_x/len(zipped_ABs)
-
+        #TODO(oleguer): Take a look at this we should do least square error instead
         #OLD CODE WHICH SHOULD BE BETTER
-        c = []
-        d = []
-        for A, B in zipped_ABs:
-            c_val = np.eye(3) - A[0:3, 0:3]
-            d_val = A[0:3, 3] - np.dot(rot_x, B[0:3, 3])
-            c.append(c_val)
-            d.append(d_val)
+        c_s = []
+        d_s = []
+        print(len(ABs))
+        for A, B in ABs:
+            A = np.mat(A)
+            B = np.mat(B)
+            c_val = np.mat(A[0:3, 0:3] - np.eye(3)) #NOTE: Swapped that for minimization
+            d_val = np.mat(A[0:3, 3] - np.dot(rot_x, B[0:3, 3]))
+            c_s.append(c_val)
+            d_s.append(d_val)
+        
+        def objective(b_x):
+            b_x = np.mat(b_x).T
+            summation = 0
+            for c, d in zip(c_s, d_s):
+                val = c*b_x + d
+                summation += np.linalg.norm(val)
+            return summation
 
-        # c = np.array(c, dtype=np.float32)
-        # d = np.array(d, dtype=np.float32)
-        # print(c.shape)
-        # print(d.shape)
-        # print(np.dot(c, c).shape)
-        # trans_x = np.dot(np.dot(np.linalg.inv(np.dot(c.T, c)), c.T), d)
+        b_x = np.array([0., 0., 0.])
+        res = minimize(objective, b_x)
+        print(res.success)
+        print(res.x)
         
         X = np.eye(4)
         X[0:3, 0:3] = rot_x 
-        X[0:3, 3] = trans_x 
+        X[0:3, 3] = res.x 
         return X
+
+    def solve_axxb_exact(self, ABs): #TODO(oleguer): Refactor this!!
+        def get_repr_vect(mat):
+            return np.mat((mat[2, 1], -mat[2, 0], mat[1, 0]))
+        
+        # 3. Solve AX=XB problem
+        M = np.zeros((3, 3))
+        alphas = []
+        betas = []
+        for A, B in ABs:
+            A = np.mat(A)
+            B = np.mat(B)
+            alpha_m = logm(A[0:3, 0:3])
+            alpha_v = get_repr_vect(alpha_m)
+            beta_m = logm(np.mat(B[0:3, 0:3]))
+            beta_v = get_repr_vect(beta_m)
+            betas.append(beta_v.T)
+            alphas.append(alpha_v.T)
+            # print(beta_v.T)
+            # print(alpha_v)
+
+        a1 = alphas[0].T
+        a2 = alphas[1].T
+        a3 = np.mat(np.cross(np.array(alphas[0].T), np.array(alphas[1].T)))
+        print(a1)
+        print(a2)
+        print(a3)
+        A = np.zeros((3, 3))
+        A[0:3, 0] = a1
+        A[0:3, 1] = a2
+        A[0:3, 2] = a3
+        print(A)
+        print("")
+
+        b1 = betas[0].T
+        b2 = betas[1].T
+        b3 = np.mat(np.cross(np.array(betas[0].T), np.array(betas[1].T)))
+        print(b1)
+        print(b2)
+        print(b3)
+        B = np.zeros((3, 3))
+        B[0:3, 0] = b1
+        B[0:3, 1] = b2
+        B[0:3, 2] = b3
+        print(B)
+        print("")
+
+        rot_x = np.mat(A)*np.mat(np.linalg.inv(B))
+        print(rot_x)
+        del A
+        del B
+        
+        c_s = []
+        d_s = []
+        for A, B in ABs:
+            A = np.mat(A)
+            B = np.mat(B)
+            c_val = np.mat(A[0:3, 0:3] - np.eye(3)) #NOTE: Swapped that for minimization
+            d_val = np.mat(A[0:3, 3] - np.dot(rot_x, B[0:3, 3]))
+            c_s.append(c_val)
+            d_s.append(d_val)
+        
+        def objective(b_x):
+            b_x = np.mat(b_x).T
+            summation = 0
+            for c, d in zip(c_s, d_s):
+                val = c*b_x + d
+                summation += np.linalg.norm(val)
+            return summation
+
+        b_x = np.array([0, 0, 0])
+        res = minimize(objective, b_x)
+        print(res.success)
+        print(res.x)
+
+        return 0
 
     def plot(self):
         '''Debug function to make sure corners and apriltag make sense
@@ -221,6 +294,7 @@ class CameraCalibrator():
         self.found, unoriented_corners = self.__get_corners(image)
         # 2. Get apriltag center
         self.apriltag_center = self.get_apriltag_center(image)
+        assert(self.apriltag_center is not None)
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
         return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
