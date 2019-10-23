@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 import pickle
 import copy
+from glob import glob
 
 def exact_test():
     A1 = [[-0.989992, -0.141120, 0.000000, 0],
@@ -35,8 +36,11 @@ if __name__ == "__main__":
     
     Ta_is = []
     Tb_is = []
-    for i in range(1, 4):
-        path = "data/set" + str(i) + "/"
+
+    paths = glob("data/157*/")
+
+    for path in paths:
+        print(path)
         image = cv2.imread(path + "amplitude.png", cv2.IMREAD_GRAYSCALE)
         A_trans = np.load(path + "translation.npy")
         A_rot = np.load(path + "rotation.npy")

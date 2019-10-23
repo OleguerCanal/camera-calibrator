@@ -294,6 +294,7 @@ class CameraCalibrator():
         self.found, unoriented_corners = self.__get_corners(image)
         # 2. Get apriltag center
         self.apriltag_center = self.get_apriltag_center(image)
+        print(self.apriltag_center)
         assert(self.apriltag_center is not None)
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
