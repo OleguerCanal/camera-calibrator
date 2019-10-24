@@ -7,6 +7,7 @@ from scipy.linalg import logm, sqrtm, inv, expm
 from scipy.optimize import minimize
 from math import sqrt
 from utils.rigid_trans_test import rigid_transform_3D  #TODO(oleguer): Remove that
+import copy
 
 class CameraCalibrator():
     def __init__(self, board_shape = (3, 4), tile_side = 0.062, apriltag_families = "tag36h10"):
@@ -93,7 +94,36 @@ class CameraCalibrator():
         corners_camera = np.array(corners_camera)
         corners_chessboard = np.array(corners_chessboard)
         chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)
+
+        # Reproject to check if it works
+        reprojected = []
+        for xyz_corner in corners_chessboard:
+            repro = np.dot(chessboard_to_camera, np.append(xyz_corner, [1]))
+            reprojected.append(repro)
+        self.__reproject(image, xyz_coordinates_matrix, reprojected)
+
         return chessboard_to_camera
+
+    def __reproject(self, image, xyz_coordinates_matrix, xyz_points):
+        xyz_coordinates_matrix
+        for point in xyz_points:
+            print(point)
+            coord = copy.deepcopy(xyz_coordinates_matrix)
+            coord[:, :, 0] -= point[0]
+            coord[:, :, 1] -= point[1]
+            coord[:, :, 2] -= point[2]
+            dist = np.sqrt(np.square(coord[:, :, 0]) + np.square(coord[:, :, 1]) + np.square(coord[:, :, 2]))
+            # cv2.imshow("dist", dist/np.max(dist))
+            # cv2.waitKey(0)
+            image_point = np.unravel_index(np.argmin(dist, axis=None), dist.shape)
+            print(dist[image_point[0], image_point[1]])
+            print(np.min(dist))
+            print(image_point)
+            image = cv2.drawMarker(image, image_point, (255))
+        
+        cv2.imshow("image", image)
+        cv2.waitKey(0)
+
 
     def eye_in_hand_finetunning(self, Ta_is, Tb_is):
         ''' 
