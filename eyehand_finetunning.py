@@ -32,7 +32,7 @@ def exact_test():
     
 if __name__ == "__main__":
     #exact_test()
-    calib = CameraCalibrator(board_shape=(6, 7), tile_side=0.010, apriltag_families="tag36h10")
+    calib = CameraCalibrator(board_shape=(6, 7), tile_side=0.10, apriltag_families="tag36h10")
     
     Ta_is = []
     Tb_is = []
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         xyz_coordinates_matrix_ordered[:, :, 2] = xyz_coordinates_matrix[:, :, 0]
 
         # Compute Tb_i
-        # A = calib.chessboard_extrinsics_2D(image)
+        A = calib.chessboard_extrinsics_2D(image)
         Tb_i = calib.chessboard_extrinsics_3D(image, xyz_coordinates_matrix_ordered)
         Tb_is.append(Tb_i)
         Ta_i = calib.transquat_to_mat(A_trans, A_rot)
