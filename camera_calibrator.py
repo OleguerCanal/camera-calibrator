@@ -92,13 +92,14 @@ class CameraCalibrator():
 
         # 3. Get matrix of chessboard frame values
         corners_chessboard = []
-        for i in range(self.board_shape[0]): #TODO(oleguer): Review board_shape params!
-            for j in range(self.board_shape[1]):
+        for i in range(self.board_shape[1]): #TODO(oleguer): Review board_shape params!
+            for j in range(self.board_shape[0]):
                 corners_chessboard.append([i*self.tile_side, j*self.tile_side, 0])
 
         corners_camera = np.array(corners_camera)
         corners_chessboard = np.array(corners_chessboard)
         chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)
+        # chessboard_to_camera = self.__rigid_transform_3D(corners_camera, corners_chessboard)
 
 
         # Reproject to check if it works
@@ -119,12 +120,8 @@ class CameraCalibrator():
             coord[:, :, 1] -= point[1]
             coord[:, :, 2] -= point[2]
             dist = np.sqrt(np.square(coord[:, :, 0]) + np.square(coord[:, :, 1]) + np.square(coord[:, :, 2]))
-            # cv2.imshow("dist", dist/np.max(dist))
-            # cv2.waitKey(0)
             image_point = np.unravel_index(np.argmin(dist, axis=None), dist.shape)
-            # print(dist[image_point[0], image_point[1]])
-            # print(np.min(dist))
-            # print(image_point)
+            image_point = (image_point[1], image_point[0])
             image = cv2.drawMarker(image, image_point, (255))
         
             cv2.imshow("image", image)
