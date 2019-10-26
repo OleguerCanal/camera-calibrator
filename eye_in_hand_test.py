@@ -3,7 +3,6 @@ import yaml
 import cv2
 import numpy as np
 
-
 if __name__ == "__main__":
     # Load sample transforms
     with open('data/transforms.yaml') as f:
