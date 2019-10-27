@@ -91,8 +91,6 @@ class CameraCalibrator():
                 corners_chessboard_frame.append([j*self.tile_side, i*self.tile_side, 0])
         camera_frame_copy = copy.deepcopy(corners_chessboard_frame)
 
-        # chessboard_to_camera = self.__rigid_transform_3D(
-        #     np.array(corners_chessboard_frame), np.array(corners_camera_frame))
         camera_to_chess = self.__rigid_transform_3D(
             np.array(corners_camera_frame), np.array(corners_chessboard_frame))
 
@@ -366,7 +364,6 @@ class CameraCalibrator():
         return np.array(result[0].center, dtype=np.int16)
 
     # TODO:(oleguer) REVIEW THIS!!!
-    # TODO:(oleguer) THIS WITH SQUARE!!!
     def __orient_corners(self, corners, april_pos):
         '''Makes sure all corners are sorted in the following way:
         a_tag
@@ -374,28 +371,25 @@ class CameraCalibrator():
         Cn+1 -> ...     -> C2n
         ...             -> Cnn
         '''
-        corners_mat = np.reshape(corners, (self.board_shape[0], self.board_shape[1], 1, 2))
+        n = self.board_shape[1] - 1
+        m = self.board_shape[0] - 1
+        corners_mat = np.reshape(corners, (n+1, m+1, 1, 2))
 
         # Get closest corner
-        n = corners_mat.shape[0] - 1
-        m = corners_mat.shape[1] - 1
         distances = []
         distances.append(dist.euclidean(april_pos, corners_mat[0][0])) # 0
-        distances.append(dist.euclidean(april_pos, corners_mat[0][m])) # 1
+        distances.append(dist.euclidean(april_pos, corners_mat[n][0])) # 1
         distances.append(dist.euclidean(april_pos, corners_mat[n][m])) # 2
-        distances.append(dist.euclidean(april_pos, corners_mat[n][0])) # 3
+        distances.append(dist.euclidean(april_pos, corners_mat[0][m])) # 3
         closest_corner = np.argmin(distances)
 
-        # print(corners_mat)
         if closest_corner == 1:
-            corners_mat = np.rot90(corners_mat, 2).T
+            corners_mat = np.flip(corners_mat, axis=0)
         elif closest_corner == 2:
-            corners_mat = np.rot90(corners_mat)
-            corners_mat = np.rot90(corners_mat)
+            corners_mat = np.flip(corners_mat, axis=0)
+            corners_mat = np.flip(corners_mat, axis=1)
         elif closest_corner == 3:
-            corners_mat = np.rot90(corners_mat, 2).T
-            corners_mat = np.transpose(corners_mat)
-        # print(corners_mat)
+            corners_mat = np.flip(corners_mat, axis=1)
 
         # Need to transpose?
         april_v = (april_pos[0] - corners_mat[0][0][0][0], april_pos[1] - corners_mat[0][0][0][1])
@@ -403,7 +397,7 @@ class CameraCalibrator():
         april_v = april_v/np.linalg.norm(april_v, ord = 2)
         second_v = second_v/np.linalg.norm(second_v, ord = 2)
         if (abs(np.dot(april_v, second_v)) > 0.5):
-            print("Transposing to correct orientation")
+            print("Transposing to fix orientation")
             corners_mat.transpose()
 
         # Return flattened corners
