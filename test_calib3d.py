@@ -8,7 +8,7 @@ from glob import glob
 def pmat(mat):
     '''Print matrix
     '''
-    print(np.round(mat, 4))
+    print(np.round(mat, 2))
 
 if __name__ == "__main__":
     calib = CameraCalibrator(board_shape=(6, 7), tile_side=0.10, apriltag_families="tag36h10")
@@ -33,15 +33,27 @@ if __name__ == "__main__":
         # print("World to chess:")
         # pmat(world_to_chess)
 
-        print(np.dot(world_to_chess, np.array([1, 1, 0, 1])))
-        Ta_is.append(world_to_cam)
-        Tb_is.append(cam_to_chess)
+        print(np.dot(world_to_chess, np.array([1, 1, 1, 1])))
+        Ta_is.append(np.mat(world_to_cam))
+        Tb_is.append(np.mat(cam_to_chess))
 
 
-    # X = calib.eye_in_hand_finetunning(Ta_is, Tb_is)
-    # print("X:")
-    # pmat(X)
+    X = calib.eye_in_hand_finetunning(Ta_is, Tb_is)
+    print("X:")
+    pmat(X)
     # print("Before:")
     # pmat(Ta_is[0])
     # print("After:")
     # pmat(np.dot(X, Ta_is[0]))
+
+    # Check eyehand performance
+    print("After X")
+    point = np.mat(np.array([1, 1, 1, 1]))
+    no_corrections = []
+    corrections = []
+    for world_to_cam, cam_to_chess in zip(Ta_is, Tb_is):
+        no_corrections.append(cam_to_chess*world_to_cam*point.T)
+        corrections.append(cam_to_chess*X*world_to_cam*point.T)
+
+    print(np.std(no_corrections, axis=0))
+    print(np.std(corrections, axis=0))

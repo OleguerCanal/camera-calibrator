@@ -126,22 +126,45 @@ class CameraCalibrator():
             # cv2.imshow("image", image)
             # cv2.waitKey(0)
 
-
     def eye_in_hand_finetunning(self, Ta_is, Tb_is):
-        ''' 
+        '''
         '''
         ABs = []
         for i in range(0, len(Ta_is)):
             for j in range(i+1, len(Ta_is)):
                 A_i = np.mat(Ta_is[i])
                 A_j = np.mat(Ta_is[j])
-                A = inv(A_i)*A_j
+                A = A_j*inv(A_i)
                 B_i = np.mat(Tb_is[i])
                 B_j = np.mat(Tb_is[j])
-                B = inv(B_i)*B_j  # TODO(Oleguer): Review this
+                B = inv(B_j)*B_i  # TODO(Oleguer): Review this
                 ABs.append((A, B))
 
-        return self.solve_axxb(ABs)
+        return self.get_X_aprox(ABs)
+
+    def get_X_aprox(self, ABs):
+        def get_trans_mat(X):
+            M = np.mat(np.eye(4))
+            M[0:3,0:3] = R.from_rotvec(X[0:3]).as_dcm()
+            M[0, 3] = X[3]
+            M[1, 3] = X[4]
+            M[2, 3] = X[5]
+            return M
+
+        def objective(X):
+            M = get_trans_mat(X)
+            error = 0
+            for A, B in ABs:
+                # DIF = M*A-B*M
+                DIF = A*M-M*B
+                error += np.linalg.norm(DIF)
+            return error
+        
+        X = np.zeros(6)
+        res = minimize(objective, X)
+        print("Optimization succesful: " + str(res.success))
+
+        return get_trans_mat(res.x)
 
     def solve_axxb(self, ABs): #TODO(oleguer): Refactor this!!
 
@@ -325,35 +348,19 @@ class CameraCalibrator():
         self.corners = []
         self.apriltag = None
         self.image = image
+
         # 1. Get chessboard corners in pixel position
-        self.found, unoriented_corners = self.__get_corners(image, False)
+        self.found, unoriented_corners = cv2.findChessboardCorners(image, self.board_shape)
+        if not self.found:
+            print("ERROR: Corners not found!")
+
         # 2. Get apriltag center
         self.apriltag_center = self.get_apriltag_center(image)
         assert(self.apriltag_center is not None)
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
         # self.corners = unoriented_corners #TODO(oleguer): Corners orienting doesnt work, fix it
-        self.plot()
         return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
-
-    def __get_corners(self, img, subpixel = False):
-        '''Given image returns list of checker corners
-        '''
-        # Convert to grayscale if its not
-        if (len(img.shape) != 2):
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-        found, corners = cv2.findChessboardCorners(img, self.board_shape)
-
-        if not found:
-            print("ERROR: Corners not found!")
-
-        if not found or not subpixel:
-            return found, corners
-
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)  # termination criteria
-        corners_subpx = cv2.cornerSubPix(img, corners, self.board_shape, (-1,-1), criteria)  # subpixel accuracy
-        return True, corners_subpx
 
     def get_apriltag_center(self, img):
         options = apriltag.DetectorOptions(families=self.apriltag_families)
@@ -364,7 +371,6 @@ class CameraCalibrator():
             return None
         return np.array(result[0].center, dtype=np.int16)
 
-    # TODO:(oleguer) REVIEW THIS!!!
     def __orient_corners(self, corners, april_pos):
         '''Makes sure all corners are sorted in the following way:
         a_tag
