@@ -30,10 +30,10 @@ if __name__ == "__main__":
 
         world_to_chess = np.dot(cam_to_chess, world_to_cam)
 
-        print("World to chess:")
-        pmat(world_to_chess)
+        # print("World to chess:")
+        # pmat(world_to_chess)
 
-        # print(np.dot(world_to_chess, np.array([1, 1, 0, 1])))
+        print(np.dot(world_to_chess, np.array([1, 1, 0, 1])))
         Ta_is.append(world_to_cam)
         Tb_is.append(cam_to_chess)
 

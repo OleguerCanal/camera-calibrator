@@ -333,6 +333,7 @@ class CameraCalibrator():
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
         # self.corners = unoriented_corners #TODO(oleguer): Corners orienting doesnt work, fix it
+        self.plot()
         return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
 
     def __get_corners(self, img, subpixel = False):
@@ -396,9 +397,9 @@ class CameraCalibrator():
         second_v = (corners_mat[0][1][0][0] - corners_mat[0][0][0][0], corners_mat[0][1][0][1] - corners_mat[0][0][0][1])
         april_v = april_v/np.linalg.norm(april_v, ord = 2)
         second_v = second_v/np.linalg.norm(second_v, ord = 2)
-        if (abs(np.dot(april_v, second_v)) > 0.5):
+        if (abs(np.dot(april_v, second_v)) < 0.5):
             print("Transposing to fix orientation")
-            corners_mat.transpose()
+            corners_mat = corners_mat.T
 
         # Return flattened corners
         corners = corners_mat.reshape((n+1)*(m+1), 1, 2)
