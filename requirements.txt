@@ -1,5 +1,5 @@
 numpy==1.16.4
-scipy==1.3.0
+scipy
+opencv-python
 apriltag==0.0.16
 PyYAML==5.1.2
-opencv-python

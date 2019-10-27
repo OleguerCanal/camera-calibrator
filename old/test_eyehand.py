@@ -7,9 +7,10 @@ if __name__ == "__main__":
     # Load sample transforms
     with open('data/transforms.yaml') as f:
         transforms_data = yaml.load(f, Loader=yaml.FullLoader)
-    
+
     # Instantiate CameraCalibration class
-    calib = CameraCalibrator(board_shape=(3, 4), tile_side=0.062, apriltag_families="tag36h10")
+    calib = CameraCalibrator(board_shape=(
+        3, 4), tile_side=0.062, apriltag_families="tag36h10")
 
     # Prepare transforms, images data
     transforms = []

@@ -20,7 +20,7 @@ def rigid_transform_3D(A, B):
 
     # special reflection case
     if linalg.det(R) < 0:
-       print("Reflection detected")
+    #    print("Reflection detected")
        Vt[2,:] *= -1
        R = Vt.T * U.T
     t = -R*centroid_A.T + centroid_B.T

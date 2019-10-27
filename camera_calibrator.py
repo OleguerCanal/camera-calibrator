@@ -38,10 +38,6 @@ class CameraCalibrator():
                 corners_m.append([i*self.tile_side, j*self.tile_side, 0])
         corners_m = [np.array(corners_m, dtype=np.float32)]
 
-        # print(corners_m)
-        # print(self.corners)
-        # self.plot()
-
         # 3. Compute transformation
         ret, intrinsics_mat, distortion_coef, rotation_vect, translation_vect =\
             cv2.calibrateCamera(corners_m, [self.corners], self.image.shape[::-1], None, None)
@@ -68,48 +64,53 @@ class CameraCalibrator():
             channel 0: x coordinates
             channel 1: y coordinates
             channel 3: z coordinates
-            NOTE: Make sure the channels are in the rigth order!!!! 
+            NOTE: Make sure the channels are in the rigth order (opencv can mess it up)!!!! 
 
             (Use this if you have a 3D sensor, otherwise use get_extrinsics_2D)
         '''
         # 1. Get oriented corners
         self.corners = self.__get_oriented_corners(image)
+        # self.plot()
 
         # 2. Get matrix of camera frame values
-        corners_camera = []
+        corners_camera_frame = []
+        xyz_coordinates_matrix = np.array(xyz_coordinates_matrix)
         for corner in self.corners:
             corner = corner[0]
-            print(corner)
-            print(xyz_coordinates_matrix.shape)
-            print(type(xyz_coordinates_matrix))
             x = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][0]
             y = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][1]
             z = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][2]
             corner_camera = [x, y, z]
-            corners_camera.append(corner_camera)
-
-        self.plot()
+            corners_camera_frame.append(corner_camera)
+        cb_frame_copy = copy.deepcopy(corners_camera_frame)
 
         # 3. Get matrix of chessboard frame values
-        corners_chessboard = []
+        corners_chessboard_frame = []
         for i in range(self.board_shape[1]): #TODO(oleguer): Review board_shape params!
             for j in range(self.board_shape[0]):
-                corners_chessboard.append([i*self.tile_side, j*self.tile_side, 0])
+                corners_chessboard_frame.append([j*self.tile_side, i*self.tile_side, 0])
+        camera_frame_copy = copy.deepcopy(corners_chessboard_frame)
 
-        corners_camera = np.array(corners_camera)
-        corners_chessboard = np.array(corners_chessboard)
-        chessboard_to_camera = self.__rigid_transform_3D(corners_chessboard, corners_camera)
-        # chessboard_to_camera = self.__rigid_transform_3D(corners_camera, corners_chessboard)
-
+        # chessboard_to_camera = self.__rigid_transform_3D(
+        #     np.array(corners_chessboard_frame), np.array(corners_camera_frame))
+        camera_to_chess = self.__rigid_transform_3D(
+            np.array(corners_camera_frame), np.array(corners_chessboard_frame))
 
         # Reproject to check if it works
         reprojected = []
-        for xyz_corner in corners_chessboard:
-            repro = np.dot(chessboard_to_camera, np.append(xyz_corner, [1]))
+        for xyz_corner in camera_frame_copy:
+            repro = np.dot(np.linalg.inv(camera_to_chess), np.append(xyz_corner, [1]))
             reprojected.append(repro)
         self.__reproject(image, xyz_coordinates_matrix, reprojected)
 
-        return chessboard_to_camera
+        error = 0
+        for xyz_corner, cam_frame in zip(cb_frame_copy, camera_frame_copy):
+            repro = np.dot(camera_to_chess, np.append(xyz_corner, [1]))
+            error += dist.euclidean(repro[0:3], cam_frame)
+        error = error/len(cb_frame_copy)
+        print("Reprojection error: " + str(np.round(1000*error, 2)) + " mm")
+
+        return camera_to_chess
 
     def __reproject(self, image, xyz_coordinates_matrix, xyz_points):
         xyz_coordinates_matrix
@@ -124,8 +125,8 @@ class CameraCalibrator():
             image_point = (image_point[1], image_point[0])
             image = cv2.drawMarker(image, image_point, (255))
         
-            cv2.imshow("image", image)
-            cv2.waitKey(0)
+            # cv2.imshow("image", image)
+            # cv2.waitKey(0)
 
 
     def eye_in_hand_finetunning(self, Ta_is, Tb_is):
@@ -145,6 +146,9 @@ class CameraCalibrator():
         return self.solve_axxb(ABs)
 
     def solve_axxb(self, ABs): #TODO(oleguer): Refactor this!!
+
+
+
         def get_repr_vect(mat):
             return np.mat((mat[2, 1], -mat[2, 0], mat[1, 0]))
         
@@ -341,11 +345,8 @@ class CameraCalibrator():
             img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
         found, corners = cv2.findChessboardCorners(img, self.board_shape)
-        print(corners)
 
-        if found:
-            print("Found corners!")
-        else:
+        if not found:
             print("ERROR: Corners not found!")
 
         if not found or not subpixel:
@@ -359,9 +360,8 @@ class CameraCalibrator():
         options = apriltag.DetectorOptions(families=self.apriltag_families)
         detector = apriltag.Detector(options=options)
         result = detector.detect(img)
-        if len(result) > 0:
-            print("Found apriltag!")
-        else:
+        if len(result) == 0:
+            print("Apriltag not found!")
             return None
         return np.array(result[0].center, dtype=np.int16)
 
