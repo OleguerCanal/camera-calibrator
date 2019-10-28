@@ -154,6 +154,9 @@ class CameraCalibrator():
         corrected_dev = np.linalg.norm(np.std(corrections, axis=0)[0:3])
         dev_improvement = (uncorrected_dev - corrected_dev)/uncorrected_dev
         print("Deviation improvement: " + str(np.round(100*dev_improvement)) + "%")
+        mean_corrected = np.linalg.norm(
+            np.mean(no_corrections, axis=0)[0:3] - np.mean(corrections, axis=0)[0:3])
+        print("Distance correction: " + str(np.round(1000*mean_corrected)) + "mm")
         return X
 
     def get_X_aprox(self, ABs):
@@ -169,13 +172,14 @@ class CameraCalibrator():
             M = get_trans_mat(X)
             error = 0
             for A, B in ABs:
-                # DIF = M*A-B*M
-                DIF = A*M-M*B
+                DIF = M*A-B*M
+                # DIF = A*M-M*B
                 error += np.linalg.norm(DIF)
             return error
         
         X = np.zeros(6)
-        res = minimize(objective, X)
+        bounds = [(-10, 10), (-10, 10), (-10, 10), (-0.001, 0.001), (-1, 1), (-1, 1)] #TODO:(Oleguer) REview this bounds!!!
+        res = minimize(objective, X, bounds=bounds)
         print("Optimization succesful: " + str(res.success))
 
         return get_trans_mat(res.x)

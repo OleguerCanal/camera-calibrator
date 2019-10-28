@@ -8,7 +8,7 @@ from glob import glob
 def pmat(mat):
     '''Print matrix
     '''
-    print(np.round(mat, 2))
+    print(np.round(mat, 3))
 
 if __name__ == "__main__":
     calib = CameraCalibrator(board_shape=(6, 7), tile_side=0.10, apriltag_families="tag36h10")
