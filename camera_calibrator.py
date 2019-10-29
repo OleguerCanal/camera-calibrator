@@ -6,7 +6,6 @@ from scipy.spatial.transform import Rotation as R
 from scipy.linalg import logm, sqrtm, inv, expm
 from scipy.optimize import minimize
 from math import sqrt
-from utils.rigid_trans_test import rigid_transform_3D  #TODO(oleguer): Remove that
 import copy
 
 class CameraCalibrator():
@@ -46,15 +45,15 @@ class CameraCalibrator():
         rot_matrix = R.from_rotvec(rotation_vect).as_dcm()
 
         # From camera to checkerboard
-        # camera_to_chessboard = np.eye(4)
-        # camera_to_chessboard[0:3,0:3] = rot_matrix
-        # camera_to_chessboard[0:3, 3] = translation_vect
+        camera_to_chessboard = np.eye(4)
+        camera_to_chessboard[0:3,0:3] = rot_matrix
+        camera_to_chessboard[0:3, 3] = translation_vect
         
         # From checkerboard to camera
-        chessboard_to_camera = np.eye(4)
-        chessboard_to_camera[0:3,0:3] = rot_matrix.T
-        chessboard_to_camera[0:3, 3] = -translation_vect
-        return chessboard_to_camera
+        # chessboard_to_camera = np.eye(4)
+        # chessboard_to_camera[0:3,0:3] = rot_matrix.T
+        # chessboard_to_camera[0:3, 3] = -np.dot(rot_matrix.T, translation_vect)
+        return camera_to_chessboard
 
     def chessboard_extrinsics_3D(self, image, xyz_coordinates_matrix):
         ''' Given image of a checkerboard with apriltag and xyz_coordinates_matrix,
@@ -186,7 +185,8 @@ class CameraCalibrator():
             return error
         
         X = np.zeros(6)
-        bounds = [(-10, 10), (-10, 10), (-10, 10), (-0.001, 0.001), (-1, 1), (-1, 1)] #TODO:(Oleguer) REview this bounds!!!
+        bounds = [(-10, 10), (-10, 10), (-10, 10),\
+             (-0.01, 0.01), (-0.01, 0.01), (-0.01, 0.01)] #TODO:(Oleguer) Review this bounds!!!
         res = minimize(objective, X, bounds=bounds)
         print("Optimization succesful: " + str(res.success))
 
@@ -240,14 +240,14 @@ class CameraCalibrator():
             print("ERROR: Corners not found!")
 
         # 2. Get apriltag center
-        self.apriltag_center = self.__get_apriltag_center(image)
+        self.apriltag_center = self.get_apriltag_center(image)
         assert(self.apriltag_center is not None)
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
         # self.corners = unoriented_corners #TODO(oleguer): Corners orienting doesnt work, fix it
         return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
 
-    def __get_apriltag_center(self, img):
+    def get_apriltag_center(self, img):
         options = apriltag.DetectorOptions(families=self.apriltag_families)
         detector = apriltag.Detector(options=options)
         result = detector.detect(img)
