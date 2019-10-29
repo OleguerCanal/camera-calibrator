@@ -27,15 +27,18 @@ if __name__ == "__main__":
 
         world_to_cam = np.linalg.inv(calib.transquat_to_mat(A_trans, A_rot))
         cam_to_chess = calib.chessboard_extrinsics_3D(image, xyz_coordinates_matrix)
-
-        world_to_chess = np.dot(cam_to_chess, world_to_cam)
-
-        # print("World to chess:")
-        # pmat(world_to_chess)
-
-        print(np.dot(world_to_chess, np.array([1, 1, 1, 1])))
         Ta_is.append(np.mat(world_to_cam))
         Tb_is.append(np.mat(cam_to_chess))
+
+        # Debug
+        print("world_to_cam:")
+        print(world_to_cam)
+
+        world_to_chess = np.dot(cam_to_chess, world_to_cam)
+        print("World to chess:")
+        pmat(world_to_chess)
+        print(np.dot(world_to_chess, np.array([1, 1, 1, 1])))
+        
 
 
     X = calib.eye_in_hand_finetunning(Ta_is, Tb_is)
@@ -45,15 +48,3 @@ if __name__ == "__main__":
     # pmat(Ta_is[0])
     # print("After:")
     # pmat(np.dot(X, Ta_is[0]))
-
-    # Check eyehand performance
-    # print("After X")
-    # point = np.mat(np.array([1, 1, 1, 1]))
-    # no_corrections = []
-    # corrections = []
-    # for world_to_cam, cam_to_chess in zip(Ta_is, Tb_is):
-    #     no_corrections.append(cam_to_chess*world_to_cam*point.T)
-    #     corrections.append(cam_to_chess*X*world_to_cam*point.T)
-
-    # print(np.std(no_corrections, axis=0))
-    # print(np.std(corrections, axis=0))

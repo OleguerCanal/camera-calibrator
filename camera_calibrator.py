@@ -127,7 +127,11 @@ class CameraCalibrator():
             # cv2.waitKey(0)
 
     def eye_in_hand_finetunning(self, Ta_is, Tb_is):
-        '''
+        ''' Given:
+            Ta_is: List of world_to_cammount transform matrices
+            Tb_is: List of cam_to_chess transform matrices
+            Returns:
+            X: cammount_to_cam transform matrix (mounting position to optical base)
         '''
         ABs = []
         for i in range(0, len(Ta_is)):
@@ -135,9 +139,14 @@ class CameraCalibrator():
                 A_i = np.mat(Ta_is[i])
                 A_j = np.mat(Ta_is[j])
                 A = A_j*inv(A_i)
+                # print("A:")
+                # print(np.round(A, 2))
                 B_i = np.mat(Tb_is[i])
                 B_j = np.mat(Tb_is[j])
-                B = inv(B_j)*B_i  # TODO(Oleguer): Review this
+                B = inv(B_j)*B_i
+                # print("B:")
+                # print(np.round(B, 2))
+                # print("----")
                 ABs.append((A, B))
 
         X = self.get_X_aprox(ABs)
@@ -173,7 +182,6 @@ class CameraCalibrator():
             error = 0
             for A, B in ABs:
                 DIF = M*A-B*M
-                # DIF = A*M-M*B
                 error += np.linalg.norm(DIF)
             return error
         
@@ -197,31 +205,23 @@ class CameraCalibrator():
     def __rigid_transform_3D(self, A, B):
         ''' Returns transformation matrix between two sets of 3D points
         '''
-
         A = np.mat(A)
         B = np.mat(B)
-        # assert len(A) == len(B)
-        # N = A.shape[0]; # total points
-        # centroid_A = np.mean(A, axis=0)
-        # centroid_B = np.mean(B, axis=0)
+        assert len(A) == len(B)
+        N = A.shape[0]; # total points
+        centroid_A = np.mean(A, axis=0)
+        centroid_B = np.mean(B, axis=0)
 
-        # # centre the points
-        # AA = A - np.tile(centroid_A, (N, 1))
-        # BB = B - np.tile(centroid_B, (N, 1))
-        # H = np.dot(AA.T, BB)
-        # U, S, Vt = np.linalg.svd(H)
-        # R = np.dot(Vt.T, U.T)
+        AA = A - np.tile(centroid_A, (N, 1))
+        BB = B - np.tile(centroid_B, (N, 1))
+        H = np.transpose(AA) * BB
+        U, S, Vt = np.linalg.svd(H)
+        R = Vt.T * U.T
 
-        # # special reflection case
-        # if np.linalg.det(R) < 0:
-        #     print("Reflection detected")
-        #     Vt[2,:] *= -1
-        #     R = np.dot(Vt.T, U.T)
-        # t = -np.dot(R,centroid_A) + centroid_B.T
-        
-        # TODO(oleguer): Implement it here
-        R, t = rigid_transform_3D(A, B)
-
+        if np.linalg.det(R) < 0:
+            Vt[2,:] *= -1
+            R = Vt.T * U.T
+        t = -R*centroid_A.T + centroid_B.T
         M = np.eye(4)
         M[0:3, 0:3] = R
         M[0:3, 3] = t.flatten()
@@ -240,14 +240,14 @@ class CameraCalibrator():
             print("ERROR: Corners not found!")
 
         # 2. Get apriltag center
-        self.apriltag_center = self.get_apriltag_center(image)
+        self.apriltag_center = self.__get_apriltag_center(image)
         assert(self.apriltag_center is not None)
         # 3. Orient corners
         self.corners = self.__orient_corners(unoriented_corners, self.apriltag_center)
         # self.corners = unoriented_corners #TODO(oleguer): Corners orienting doesnt work, fix it
         return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
 
-    def get_apriltag_center(self, img):
+    def __get_apriltag_center(self, img):
         options = apriltag.DetectorOptions(families=self.apriltag_families)
         detector = apriltag.Detector(options=options)
         result = detector.detect(img)
