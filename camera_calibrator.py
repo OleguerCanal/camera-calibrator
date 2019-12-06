@@ -14,14 +14,15 @@ class CameraCalibrator():
         self.tile_side = tile_side
         self.apriltag_families = apriltag_families
 
-    def transquat_to_mat(self, translation, quaternion):
+    def transquat_to_mat(self, trans, quaternion):
         ''' Given a translation vector and a quaternion returns transformation matrix
         '''
+        # print(trans)
         M = np.eye(4)
         rot_matrix = R.from_quat(quaternion).as_dcm()
         M[0:3,0:3] = rot_matrix
-        M[0:3, 3] = translation
-        return M
+        M[0:3, 3] = trans
+        return np.matrix(M)
 
     #TODO(oleguer): Return intrinsics as well
     def chessboard_extrinsics_2D(self, image):
@@ -69,13 +70,16 @@ class CameraCalibrator():
         '''
         # 1. Get oriented corners
         self.corners = self.__get_oriented_corners(image)
-        # self.plot()
+        self.plot()
 
         # 2. Get matrix of camera frame values
         corners_camera_frame = []
         xyz_coordinates_matrix = np.array(xyz_coordinates_matrix)
         for corner in self.corners:
             corner = corner[0]
+            # x = xyz_coordinates_matrix[int(corner[0])][int(corner[1])][0]
+            # y = xyz_coordinates_matrix[int(corner[0])][int(corner[1])][1]
+            # z = xyz_coordinates_matrix[int(corner[0])][int(corner[1])][2]
             x = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][0]
             y = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][1]
             z = xyz_coordinates_matrix[int(corner[1])][int(corner[0])][2]
@@ -89,6 +93,10 @@ class CameraCalibrator():
             for j in range(self.board_shape[0]):
                 corners_chessboard_frame.append([j*self.tile_side, i*self.tile_side, 0])
         camera_frame_copy = copy.deepcopy(corners_chessboard_frame)
+
+        # print(corners_camera_frame)
+
+        # print(corners_chessboard_frame)
 
         camera_to_chess = self.__rigid_transform_3D(
             np.array(corners_camera_frame), np.array(corners_chessboard_frame))
@@ -107,7 +115,7 @@ class CameraCalibrator():
         error = error/len(cb_frame_copy)
         print("Reprojection error: " + str(np.round(1000*error, 2)) + " mm")
 
-        return camera_to_chess
+        return np.matrix(camera_to_chess)
 
     def __reproject(self, image, xyz_coordinates_matrix, xyz_points):
         xyz_coordinates_matrix
@@ -248,6 +256,8 @@ class CameraCalibrator():
         return self.corners  #TODO(oleguer): Shouldnt be returning self variable, fix this
 
     def get_apriltag_center(self, img):
+        # print(type(img))
+        # print(type(img[0][0]))
         options = apriltag.DetectorOptions(families=self.apriltag_families)
         detector = apriltag.Detector(options=options)
         result = detector.detect(img)
